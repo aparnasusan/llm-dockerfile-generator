@@ -1,5 +1,7 @@
 # dockergen — Dockerfile generation with a local LLM
 
+[![CI](https://github.com/aparnasusan/llm-dockerfile-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/aparnasusan/llm-dockerfile-generator/actions/workflows/ci.yml)
+
 `dockergen` scans a project folder (language, dependency files, entrypoint, ports), then asks an
 open-weight LLM running locally in **Ollama** to write a Dockerfile for it. With `--build` it
 also runs `docker build`. If the build fails, the error goes back to the model to fix.
