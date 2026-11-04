@@ -26,7 +26,8 @@ python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirements.
 
 ## Architecture
 
-Pipeline: `analyzer` → `prompts` → `generator` → `validator`, orchestrated by `cli`.
+Pipeline: `analyzer` → `prompts` → `generator` → `validator`. The generate → build → repair loop
+lives once in `dockergen/pipeline.py` and is used by the CLI, the web UI and the benchmark.
 
 - `dockergen/analyzer.py`: `analyze(path) -> ProjectInfo`. Detects language from `MARKERS`
   (first match wins, in order), falling back to counting source file extensions. Finds the
@@ -42,10 +43,12 @@ Pipeline: `analyzer` → `prompts` → `generator` → `validator`, orchestrated
   lazily so tests don't need it.
 - `dockergen/validator.py`: `docker_available()` and `build(context, dockerfile, tag)` via
   `subprocess` with `docker build -f`.
-- `dockergen/cli.py`: argparse plus rich output; owns the overwrite prompt and the repair loop.
-- `app.py` (project root, so Streamlit can import `dockergen`): Streamlit UI that mirrors
-  `cli.main`'s generate/build/repair loop and keeps the result in `st.session_state`. If you change
-  the loop in `cli.py`, update it here too.
+- `dockergen/pipeline.py`: `run(info, gen, dockerfile_path, build=, retries=, tag=, on_event=)` ->
+  `RunResult` (attempts, timings, `built`, `first_try_built`, `repairs`, `error_stage`). Front ends
+  show progress through the `on_event` callback. Tested with a fake generator and fake `build`.
+- `dockergen/cli.py`: argparse plus rich output; owns the overwrite prompt.
+- `app.py` (project root, so Streamlit can import `dockergen`): Streamlit UI over `pipeline.run`;
+  keeps the result in `st.session_state`.
 - `examples/`: small Flask, Express, and Go apps used by tests and for manual runs. Generated
   `Dockerfile`s in there are build artifacts and can be overwritten.
 

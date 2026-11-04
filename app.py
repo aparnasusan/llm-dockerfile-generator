@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from dockergen import validator
+from dockergen import pipeline, validator
 from dockergen.analyzer import analyze
 from dockergen.generator import DEFAULT_MODEL, DockerfileGenerator
 
@@ -111,48 +111,40 @@ if save and out.exists():
 
 if st.button("Generate Dockerfile", type="primary"):
     st.session_state.pop("result", None)
-    try:
-        gen = DockerfileGenerator(model=model, host=host)
-        with st.spinner(f"Asking {model} for a Dockerfile…"):
-            dockerfile = gen.generate(info)
-    except Exception as e:
-        st.error(f"Generation failed: {e}")
+    build = do_build
+    if build and not docker_ok():
+        st.error("Docker isn't available, so the build was skipped.")
+        build = False
+
+    # Without "save", write to a scratch file next to the project and delete it afterwards.
+    target = out if save else info.root / ".dockergen.Dockerfile"
+    messages = {"generating": f"Asking {model} for a Dockerfile…",
+                "building": "docker build (attempt {attempt})…",
+                "repairing": "Asking the model to fix the Dockerfile…"}
+    with st.status("Working…", expanded=False) as box:
+        def on_event(kind: str, **data) -> None:
+            if kind in messages:
+                box.update(label=messages[kind].format(**data))
+
+        try:
+            gen = DockerfileGenerator(model=model, host=host)
+            result = pipeline.run(info, gen, target, build=build, retries=int(retries),
+                                  tag=tag, on_event=on_event)
+        finally:
+            if not save:
+                target.unlink(missing_ok=True)
+        box.update(label="Done", state="complete")
+
+    if result.error_stage == "generate":
+        st.error(f"Generation failed: {result.error}")
         st.caption(f"Is Ollama running? Try `ollama serve` and `ollama pull {model}`.")
         st.stop()
+    if result.error_stage == "repair":
+        st.error(f"Repair failed: {result.error}")
 
-    attempts = [{"dockerfile": dockerfile, "build": None}]
-    status = "generated"
-
-    if do_build:
-        if not docker_ok():
-            st.error("Docker isn't available, so the build was skipped.")
-        else:
-            build_file = out if save else info.root / ".dockergen.Dockerfile"
-            for attempt in range(int(retries) + 1):
-                build_file.write_text(dockerfile, encoding="utf-8")
-                with st.spinner(f"docker build (attempt {attempt + 1})…"):
-                    result = validator.build(info.root, build_file, tag=tag)
-                attempts[-1]["build"] = result
-                if result.ok:
-                    status = "built"
-                    break
-                status = "failed"
-                if attempt == retries:
-                    break
-                try:
-                    with st.spinner("Asking the model to fix the Dockerfile…"):
-                        dockerfile = gen.repair(dockerfile, result.output)
-                except Exception as e:
-                    st.error(f"Repair failed: {e}")
-                    break
-                attempts.append({"dockerfile": dockerfile, "build": None})
-            if not save:
-                build_file.unlink(missing_ok=True)
-
-    if save:
-        out.write_text(dockerfile, encoding="utf-8")
-    st.session_state.result = {"attempts": attempts, "status": status,
-                               "final": dockerfile, "saved": save, "tag": tag,
+    status = "built" if result.built else "failed" if build else "generated"
+    st.session_state.result = {"attempts": result.attempts, "status": status,
+                               "final": result.dockerfile, "saved": save, "tag": tag,
                                "ports": info.ports, "model": model}
 
 # ---------------------------------------------------------------- results
@@ -173,13 +165,13 @@ if res:
     if res["saved"]:
         st.caption(f"Saved to `{out}`")
 
-    if len(res["attempts"]) > 1 or res["attempts"][0]["build"]:
+    if len(res["attempts"]) > 1 or res["attempts"][0].build:
         st.subheader("Build attempts")
         for i, a in enumerate(res["attempts"], 1):
-            b = a["build"]
+            b = a.build
             label = "✅ passed" if b and b.ok else "❌ failed" if b else "not built"
             with st.expander(f"Attempt {i}: {label}", expanded=False):
-                show_dockerfile(a["dockerfile"])
+                show_dockerfile(a.dockerfile)
                 if b:
                     st.text("docker build output (last 3000 chars):")
                     st.code(b.output[-3000:], language="text")

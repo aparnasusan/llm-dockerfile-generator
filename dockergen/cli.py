@@ -11,7 +11,7 @@ from rich.syntax import Syntax
 
 from dockergen.analyzer import analyze
 from dockergen.generator import DEFAULT_MODEL, DockerfileGenerator
-from dockergen import validator
+from dockergen import pipeline, validator
 
 console = Console()
 
@@ -61,52 +61,58 @@ def main(argv: list[str] | None = None) -> int:
             console.print("Aborted.")
             return 1
 
+    if args.build and not validator.docker_available():
+        console.print("[red]Docker is not available (is Docker Desktop running?).[/red]")
+        return 1
+
     try:
         gen = DockerfileGenerator(model=args.model, host=args.host)
-        with console.status(f"Asking [bold]{args.model}[/bold] for a Dockerfile..."):
-            dockerfile = gen.generate(info)
-    except Exception as e:  # connection errors, missing model, bad reply
-        console.print(f"[red]Generation failed:[/red] {e}")
+    except Exception as e:
+        console.print(f"[red]Could not create the Ollama client:[/red] {e}")
+        return 1
+
+    status = console.status("")
+    status.start()
+
+    def on_event(kind: str, **data) -> None:
+        if kind == "generating":
+            status.update(f"Asking [bold]{args.model}[/bold] for a Dockerfile...")
+        elif kind == "building":
+            if data["attempt"] == 1:
+                show_dockerfile(out.read_text(encoding="utf-8"), f"Generated Dockerfile -> {out}")
+            status.update(f"docker build (attempt {data['attempt']})...")
+        elif kind == "built" and not data["result"].ok:
+            console.print(f"[red]Build failed (attempt {data['attempt']}).[/red]")
+            console.print(data["result"].output[-1500:], markup=False, highlight=False)
+        elif kind == "repairing":
+            status.update("Asking the model to fix the Dockerfile...")
+        elif kind == "repaired":
+            show_dockerfile(data["dockerfile"], f"Repaired Dockerfile (attempt {data['attempt']})")
+
+    try:
+        result = pipeline.run(info, gen, out, build=args.build, retries=args.retries,
+                              tag=args.tag, on_event=on_event)
+    finally:
+        status.stop()
+
+    if result.error_stage == "generate":
+        console.print(f"[red]Generation failed:[/red] {result.error}")
         console.print("Is Ollama running? Try `ollama serve` and "
                       f"`ollama pull {args.model}`.")
         return 1
-
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(dockerfile, encoding="utf-8")
-    show_dockerfile(dockerfile, f"Generated Dockerfile -> {out}")
-
     if not args.build:
+        show_dockerfile(result.dockerfile, f"Generated Dockerfile -> {out}")
         return 0
-
-    if not validator.docker_available():
-        console.print("[red]Docker is not available (is Docker Desktop running?). "
-                      "Skipping build.[/red]")
+    if result.error_stage == "repair":
+        console.print(f"[red]Repair failed:[/red] {result.error}")
         return 1
-
-    for attempt in range(args.retries + 1):
-        with console.status(f"docker build (attempt {attempt + 1})..."):
-            result = validator.build(info.root, out, tag=args.tag)
-        if result.ok:
-            console.print(f"[green]Build succeeded![/green] Image tag: [bold]{args.tag}[/bold]")
-            ports = info.ports or []
-            if ports:
-                console.print(f"Try it: docker run --rm -p {ports[0]}:{ports[0]} {args.tag}")
-            else:
-                console.print(f"Try it: docker run --rm {args.tag}")
-            return 0
-
-        console.print(f"[red]Build failed (attempt {attempt + 1}).[/red]")
-        console.print(result.output[-1500:], markup=False, highlight=False)
-        if attempt == args.retries:
-            break
-        try:
-            with console.status("Asking the model to fix the Dockerfile..."):
-                dockerfile = gen.repair(dockerfile, result.output)
-        except Exception as e:
-            console.print(f"[red]Repair failed:[/red] {e}")
-            return 1
-        out.write_text(dockerfile, encoding="utf-8")
-        show_dockerfile(dockerfile, f"Repaired Dockerfile (attempt {attempt + 2})")
+    if result.built:
+        console.print(f"[green]Build succeeded![/green] Image tag: [bold]{args.tag}[/bold]")
+        if info.ports:
+            console.print(f"Try it: docker run --rm -p {info.ports[0]}:{info.ports[0]} {args.tag}")
+        else:
+            console.print(f"Try it: docker run --rm {args.tag}")
+        return 0
 
     console.print("[red]Could not produce a building Dockerfile. "
                   "Try a larger model with --model.[/red]")
