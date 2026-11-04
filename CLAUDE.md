@@ -12,13 +12,21 @@ via Ollama**. It analyzes a project folder, prompts the model, writes the Docker
 ## Commands (Windows / PowerShell)
 
 ```powershell
-python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -e ".[dev]"   # editable dev install
 .\.venv\Scripts\python.exe -m pytest -q                          # unit tests (no Ollama/Docker needed)
-.\.venv\Scripts\python.exe -m dockergen examples/python-flask    # generate only
-.\.venv\Scripts\python.exe -m dockergen examples/go-http --build --force   # generate + build + repair
-.\.venv\Scripts\streamlit.exe run app.py                       # web UI
-.\.venv\Scripts\python.exe -m dockergen.benchmark --runs 3      # benchmark (needs Docker; --no-build without)
+.\.venv\Scripts\dockergen.exe examples/python-flask              # generate only
+.\.venv\Scripts\dockergen.exe examples/go-http --build --force   # generate + build + repair
+.\.venv\Scripts\streamlit.exe run app.py                         # web UI (or dockergen-ui.exe)
+.\.venv\Scripts\dockergen-bench.exe --runs 3                     # benchmark (needs Docker; --no-build without)
 ```
+
+- Packaging is in `pyproject.toml` (setuptools; distribution name `llm-dockerfile-generator`,
+  import name `dockergen`, version from `dockergen.__version__`). Runtime deps go in
+  `dependencies`; Streamlit is the `[ui]` extra; test/lint tools are `[dev]`. There is no
+  requirements.txt. Console scripts: `dockergen`, `dockergen-bench`, `dockergen-ui`.
+- Code must work when installed (not just from the checkout): don't build paths from
+  `Path(__file__).parent.parent`; use the current directory for user files (`results/`,
+  `bench-work/`, `examples/`). CI does a regular `pip install ".[dev]"` and runs `dockergen --help`.
 
 - Lint with `.\.venv\Scripts\ruff.exe check .` (config in `pyproject.toml`; `prompts.py` is exempt
   from line length). CI (`.github/workflows/ci.yml`) runs ruff plus pytest on Ubuntu and Windows.
@@ -55,8 +63,9 @@ lives once in `dockergen/pipeline.py` and is used by the CLI, the web UI and the
   accept CSV string values, so old `runs.csv` files can be re-summarized.
 - `dockergen/validator.py` also has `image_size`, `remove_image`, and `lint` (hadolint binary or
   Docker image; returns `None` when hadolint can't run, which is different from `[]`).
-- `app.py` (project root, so Streamlit can import `dockergen`): Streamlit UI over `pipeline.run`;
-  keeps the result in `st.session_state`.
+- `dockergen/webui.py`: Streamlit UI over `pipeline.run`; keeps the result in
+  `st.session_state`. Launched by `dockergen/ui.py` (`dockergen-ui`), or by the root `app.py`
+  shim, which uses `runpy.run_module` because Streamlit must re-execute the script on every rerun.
 - `examples/`: small Flask, Express, and Go apps used by tests and for manual runs. Generated
   `Dockerfile`s in there are build artifacts and can be overwritten.
 

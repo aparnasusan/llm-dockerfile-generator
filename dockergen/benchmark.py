@@ -1,6 +1,6 @@
 """Benchmark models on how often their Dockerfiles actually build.
 
-    python -m dockergen.benchmark --models llama3.2:3b qwen2.5-coder:7b --runs 3
+    dockergen-bench --models llama3.2:3b qwen2.5-coder:7b --runs 3
 
 For every (model, project, run) it runs the same generate -> build -> repair loop as the
 CLI, then records whether the build passed on the first try and after repairs, how many
@@ -24,8 +24,9 @@ from dockergen import pipeline, validator
 from dockergen.analyzer import analyze
 from dockergen.generator import DEFAULT_MODEL, DockerfileGenerator
 
-ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "examples"
+# Paths are relative to where the command runs, so an installed copy doesn't write into
+# site-packages. From a source checkout, the default projects are the ones in examples/.
+EXAMPLES = Path("examples")
 
 FIELDS = ["model", "project", "language", "run", "generated", "built", "first_try_built",
           "repairs", "model_seconds", "build_seconds", "image_mb", "lint_errors",
@@ -144,7 +145,7 @@ def print_table(title: str, summary: list[dict]) -> None:
 # ---------------------------------------------------------------- CLI
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(prog="python -m dockergen.benchmark",
+    p = argparse.ArgumentParser(prog="dockergen-bench",
                                 description="Benchmark Dockerfile generation across models.")
     p.add_argument("projects", nargs="*",
                    help="project folders (default: every folder in examples/)")
@@ -158,15 +159,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--keep-images", action="store_true",
                    help="don't delete the images built during the benchmark")
     p.add_argument("--host", help="Ollama host URL")
-    p.add_argument("--out", default=str(ROOT / "results"),
-                   help="results directory (default: results/)")
+    p.add_argument("--out", default="results",
+                   help="results directory (default: ./results)")
     return p.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    projects = [Path(p).resolve() for p in args.projects] or \
-        sorted(p for p in EXAMPLES.iterdir() if p.is_dir())
+    if args.projects:
+        projects = [Path(p).resolve() for p in args.projects]
+    elif EXAMPLES.is_dir():
+        projects = sorted(p.resolve() for p in EXAMPLES.iterdir() if p.is_dir())
+    else:
+        console.print("[red]No projects given and no ./examples folder. "
+                      "Pass one or more project folders.[/red]")
+        return 2
     build = not args.no_build
     if build and not validator.docker_available():
         console.print("[red]Docker is not available. Start Docker Desktop, "
@@ -175,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.out) / stamp
-    work_dir = ROOT / "bench-work" / stamp
+    work_dir = Path("bench-work").resolve() / stamp
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / "runs.csv"
 

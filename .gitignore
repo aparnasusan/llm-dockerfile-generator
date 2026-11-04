@@ -16,3 +16,8 @@ bench-work/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Packaging
+build/
+dist/
+*.egg-info/
