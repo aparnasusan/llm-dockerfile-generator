@@ -104,7 +104,7 @@ def summarize(rows: list[dict], by: tuple[str, ...] = ("model",)) -> list[dict]:
         built_rows = [r for r in rs if _is_true(r.get("built"))]
         attempted_build = [r for r in rs if r.get("built") not in ("", None)]
         linted = [r for r in rs if r.get("lint_errors") not in ("", None)]
-        s = dict(zip(by, key))
+        s = dict(zip(by, key, strict=True))
         s["runs"] = n
         s["generated"] = _pct(sum(_is_true(r["generated"]) for r in rs), n)
         s["first-try build"] = _pct(sum(_is_true(r.get("first_try_built")) for r in rs),

@@ -20,6 +20,8 @@ python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirements.
 .\.venv\Scripts\python.exe -m dockergen.benchmark --runs 3      # benchmark (needs Docker; --no-build without)
 ```
 
+- Lint with `.\.venv\Scriptsuff.exe check .` (config in `pyproject.toml`; `prompts.py` is exempt
+  from line length). CI (`.github/workflows/ci.yml`) runs ruff plus pytest on Ubuntu and Windows.
 - Set `$env:PYTHONIOENCODING='utf-8'` when capturing CLI output, or rich's box characters can fail.
 - `--build` needs Docker Desktop running (`docker info` must succeed).
 - The default model is `llama3.2:3b` (`DEFAULT_MODEL` in `dockergen/generator.py`). Use `--model`

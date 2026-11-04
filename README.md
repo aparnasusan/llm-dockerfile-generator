@@ -99,10 +99,11 @@ benchmark are deleted unless you pass `--keep-images`.
 
 ```powershell
 python -m pytest
+ruff check .          # lint (pip install ruff)
 ```
 
-The tests cover the analyzer, Dockerfile extraction, the repair loop (with a fake model and fake
-`docker build`), and the benchmark's aggregation. They don't need Ollama or Docker.
+CI runs both on every push. The tests cover the analyzer, Dockerfile extraction, the repair
+loop (with a fake model and fake `docker build`), and the benchmark's aggregation. They don't need Ollama or Docker.
 
 ## Ideas to extend
 

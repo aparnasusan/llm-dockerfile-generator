@@ -77,7 +77,8 @@ with st.sidebar:
 st.title("🐳 dockergen")
 st.write("Generate a Dockerfile for a project with a local LLM running in Ollama.")
 
-examples = sorted(p.name for p in EXAMPLES_DIR.iterdir() if p.is_dir()) if EXAMPLES_DIR.is_dir() else []
+examples = (sorted(p.name for p in EXAMPLES_DIR.iterdir() if p.is_dir())
+            if EXAMPLES_DIR.is_dir() else [])
 col1, col2 = st.columns([1, 2])
 with col1:
     example = st.selectbox("Example project", ["(none)"] + examples)

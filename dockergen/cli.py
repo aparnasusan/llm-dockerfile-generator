@@ -9,9 +9,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 
+from dockergen import pipeline, validator
 from dockergen.analyzer import analyze
 from dockergen.generator import DEFAULT_MODEL, DockerfileGenerator
-from dockergen import pipeline, validator
 
 console = Console()
 
