@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Dockerfiles generated into the example projects by manual runs
+examples/*/Dockerfile
+.dockergen.Dockerfile
+
+# Benchmark scratch output (the summary tables in results/ are committed)
+bench-work/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
