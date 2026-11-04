@@ -17,6 +17,7 @@ python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirements.
 .\.venv\Scripts\python.exe -m dockergen examples/python-flask    # generate only
 .\.venv\Scripts\python.exe -m dockergen examples/go-http --build --force   # generate + build + repair
 .\.venv\Scripts\streamlit.exe run app.py                       # web UI
+.\.venv\Scripts\python.exe -m dockergen.benchmark --runs 3      # benchmark (needs Docker; --no-build without)
 ```
 
 - Set `$env:PYTHONIOENCODING='utf-8'` when capturing CLI output, or rich's box characters can fail.
@@ -47,6 +48,11 @@ lives once in `dockergen/pipeline.py` and is used by the CLI, the web UI and the
   `RunResult` (attempts, timings, `built`, `first_try_built`, `repairs`, `error_stage`). Front ends
   show progress through the `on_event` callback. Tested with a fake generator and fake `build`.
 - `dockergen/cli.py`: argparse plus rich output; owns the overwrite prompt.
+- `dockergen/benchmark.py`: loops model × project × run over `pipeline.run`, writes
+  `results/<stamp>/runs.csv` + `summary.md`. `summarize`/`to_markdown` are pure and tested; they
+  accept CSV string values, so old `runs.csv` files can be re-summarized.
+- `dockergen/validator.py` also has `image_size`, `remove_image`, and `lint` (hadolint binary or
+  Docker image; returns `None` when hadolint can't run, which is different from `[]`).
 - `app.py` (project root, so Streamlit can import `dockergen`): Streamlit UI over `pipeline.run`;
   keeps the result in `st.session_state`.
 - `examples/`: small Flask, Express, and Go apps used by tests and for manual runs. Generated

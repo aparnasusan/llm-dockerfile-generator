@@ -60,6 +60,28 @@ python -m dockergen examples/go-http --build --model hf.co/Qwen/Qwen2.5-Coder-7B
 Small models (3B) are fast but make more mistakes. Coding models of 7B or larger produce
 noticeably better Dockerfiles, especially multi-stage builds.
 
+## Benchmark
+
+`dockergen.benchmark` measures how often each model's Dockerfiles actually build. For every
+model × project × run it uses the same generate → build → repair loop as the CLI and records:
+
+- **First-try build rate** and **build rate after repairs**
+- **Repairs needed** for the runs that passed
+- **Model time**, **image size**, and **[hadolint](https://github.com/hadolint/hadolint)**
+  errors and warnings (it uses a local `hadolint` binary if installed, otherwise the
+  `hadolint/hadolint` Docker image)
+
+```powershell
+ollama pull qwen2.5-coder:7b
+python -m dockergen.benchmark --models llama3.2:3b qwen2.5-coder:7b --runs 3
+python -m dockergen.benchmark examples/go-http --runs 5      # one project
+python -m dockergen.benchmark --no-build                     # no Docker: speed only
+```
+
+Each run writes `results/<timestamp>/runs.csv` (one row per run) and `summary.md` (tables by model
+and by model × project). Generated Dockerfiles go to `bench-work/`, and images built during the
+benchmark are deleted unless you pass `--keep-images`.
+
 ## How it works
 
 | Module | Role |
@@ -68,7 +90,9 @@ noticeably better Dockerfiles, especially multi-stage builds.
 | `dockergen/prompts.py` | System prompt with Dockerfile best practices, plus generation and repair prompts |
 | `dockergen/generator.py` | Ollama chat client that keeps conversation history; pulls the Dockerfile out of the model's reply |
 | `dockergen/validator.py` | Runs `docker build` and captures the output |
-| `dockergen/cli.py` | Ties it all together: generate → write → build → repair loop |
+| `dockergen/pipeline.py` | The generate → build → repair loop, shared by the CLI, web UI and benchmark |
+| `dockergen/cli.py` | Command-line front end |
+| `dockergen/benchmark.py` | Runs models across projects and writes pass-rate / size / lint tables |
 | `app.py` | Streamlit web UI over the same pipeline |
 
 ## Tests
@@ -77,10 +101,10 @@ noticeably better Dockerfiles, especially multi-stage builds.
 python -m pytest
 ```
 
-The tests cover the analyzer and the Dockerfile extraction. They don't need Ollama or Docker.
+The tests cover the analyzer, Dockerfile extraction, the repair loop (with a fake model and fake
+`docker build`), and the benchmark's aggregation. They don't need Ollama or Docker.
 
 ## Ideas to extend
 
 - Also generate `.dockerignore` and `docker-compose.yml`
-- Compare models (pass rate of `docker build` across the example projects)
-- Lint the output with [hadolint](https://github.com/hadolint/hadolint)
+- Feed hadolint warnings back to the model, like build errors
