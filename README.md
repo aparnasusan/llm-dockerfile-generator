@@ -111,3 +111,7 @@ loop (with a fake model and fake `docker build`), and the benchmark's aggregatio
 
 - Also generate `.dockerignore` and `docker-compose.yml`
 - Feed hadolint warnings back to the model, like build errors
+
+## License
+
+[MIT](LICENSE) © 2026 Aparna Susan Varughese
